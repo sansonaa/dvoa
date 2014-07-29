@@ -4,13 +4,14 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from sklearn.linear_model import LinearRegression as LR
+from sklearn.neighbors import KNeighborsRegressor as KNReg
+from sklearn.neighbors import RadiusNeighborsRegressor as RNReg
 from sklearn.cross_validation import train_test_split as tts
 from sklearn.metrics import mean_squared_error as mse
 from sklearn.metrics import mean_absolute_error as mae
 from sklearn.feature_selection import f_regression
 
 pd.set_option('display.max_columns', 120)
-
 
 
 def evaluate_prediction(model,X,y):
@@ -55,10 +56,10 @@ for y in yrs:
 	df_lag = df_lag.append(df_tmp[df_lag.columns])
 
 # Calculate changes
-df_lag['change'] = df_lag.yr2 - df_lag.yr1
-df_lag['abs_change'] = abs(df_lag.yr2 - df_lag.yr1)
-for c in df_lag.columns:
-	df_lag[c] = df_lag[c].astype(float)
+# df_lag['change'] = df_lag.yr2 - df_lag.yr1
+# df_lag['abs_change'] = abs(df_lag.yr2 - df_lag.yr1)
+# for c in df_lag.columns:
+	# df_lag[c] = df_lag[c].astype(float)
 
 Xcol = ['yr1_f','off_f','def_f','st_f','s_p','fei']
 ycol = ['yr2_f']
@@ -92,46 +93,71 @@ df2014 = df[df.Year == 2013][['Year', 'Team','f','off_f','def_f','st_f','s_p','f
 df2014['f2014'] = linreg.predict(df2014[['f','off_f','def_f','st_f','s_p','fei']].values)
 df2014.sort('f2014', ascending=False,inplace=True)
 df2014['rnk_2014'] = range(1,df2014.shape[0]+1)
-df2014.to_csv('f2014_project_oneyr.csv', index=False)
+#df2014.to_csv('f2014_project_oneyr.csv', index=False)
 
 
 # build 3yr avgs
 Xvar = ['f', 'off_f','def_f','st_f','s_p','fei']
-#df_3avg = pd.DataFrame(columns=Xvar)
-for y in -np.sort(-yrs):
-	y3 = [y-1,y-2,y-3]
-	if y3[2] not in yrs:
-		break
-	print y, ", ", y3
-	tms_include = np.intersect1d(df[df.Year == y3[0]].Team.values, df[df.Year == y3[2]].Team.values)
-	df_tmp = pd.merge(df[(df.Year.isin(y3)) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), df[(df.Year == y3[0]) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), how='left',left_index=True, right_index=True, suffixes=['_3yr_avg','_yr3'])
-	# df_tmp = pd.merge(df[(df.Year.isin(y3)) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), df[(df.Year == y) & (df.Team.isin(tms_include))][['Team','f']], how='left',left_index=True, right_on='Team')
+##########
+# previously ran and saved as 3yravg.csv
+df_3avg = pd.read_csv('3yravg.csv', index_col='Team')
+##########
+# #df_3avg = pd.DataFrame(columns=Xvar)
+# for y in -np.sort(-yrs):
+	# y3 = [y-1,y-2,y-3]
+	# if y3[2] not in yrs:
+		# break
+	# print y, ", ", y3
+	# tms_include = np.intersect1d(df[df.Year == y3[0]].Team.values, df[df.Year == y3[2]].Team.values)
+	# df_tmp = pd.merge(df[(df.Year.isin(y3)) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), df[(df.Year == y3[0]) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), how='left',left_index=True, right_index=True, suffixes=['_3yr_avg','_yr3'])
+	# # df_tmp = pd.merge(df[(df.Year.isin(y3)) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), df[(df.Year == y) & (df.Team.isin(tms_include))][['Team','f']], how='left',left_index=True, right_on='Team')
 
-	df_tmp2 = df[(df.Year == y) & (df.Team.isin(tms_include))].groupby('Team')['f'].mean()
-	df_tmp2 = pd.DataFrame(df_tmp2)
-	df_tmp = pd.merge(df_tmp, df_tmp2, how='left',left_index=True, right_index=True)
-	df_tmp.rename(columns={'f':'yr4_f'}, inplace=True)
-	if df_3avg is None:
-		df_3avg = df_tmp
-	else:
-		df_3avg = df_3avg.append(df_tmp)
+	# df_tmp2 = df[(df.Year == y) & (df.Team.isin(tms_include))].groupby('Team')['f'].mean()
+	# df_tmp2 = pd.DataFrame(df_tmp2)
+	# df_tmp = pd.merge(df_tmp, df_tmp2, how='left',left_index=True, right_index=True)
+	# df_tmp.rename(columns={'f':'yr4_f'}, inplace=True)
+	# if df_3avg is None:
+		# df_3avg = df_tmp
+	# else:
+		# df_3avg = df_3avg.append(df_tmp)
 
 #Regress 3 yr avgs and project 2014 based on 2011,12, and 13
 threeYrXcol = df_3avg.columns[:-1]
 threeYrycol = df_3avg.columns[-1:]
-
-lin3 = LR()
-lin3.fit(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
-print "Intercept: ", lin3.intercept_
-for k, v in enumerate(lin3.coef_[0]):
-	print threeYrXcol[k], ": ", v
 
 #Feature Selection for 3 year avgs/prev yr
 F,p = f_regression(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
 for k, v in enumerate(p):
 	print threeYrXcol[k], ": ", v
 
+# Break up into TTS slices
+X_train, X_test, y_train, y_test = tts(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
 
+# Linear Regression
+lin3 = LR()
+#lin3.fit(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
+lin3.fit(X_train, y_train)
+print "Train: ", lin3.score(X_train, y_train)
+print "Test: ", lin3.score(X_test, y_test)
+print "Intercept: ", lin3.intercept_
+for k, v in enumerate(lin3.coef_[0]):
+	print threeYrXcol[k], ": ", v
+
+# KNeighborsRegressor
+kn3 = KNReg(weights='uniform')
+#kn3.fit(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
+kn3.fit(X_train, y_train)
+print "Train: ", kn3.score(X_train, y_train)
+print "Test: ", kn3.score(X_test, y_test)
+# print kn3.score(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
+
+# RadiusNeighborsRegressor
+rn3 = RNReg(radius=7.0)
+#rn3.fit(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
+rn3.fit(X_train, y_train)
+print "Train: ", rn3.score(X_train, y_train)
+print "Test: ", rn3.score(X_test, y_test)
+print rn3.score(df_3avg[threeYrXcol].values, df_3avg[threeYrycol].values)
 
 # Test 2010/11/12 stats and 2013 projections against 2013 actuals
 y=2013
@@ -143,9 +169,11 @@ df2012.sort('f_yr3', ascending=False, inplace=True)
 df2012['rnk_2012'] = range(1,df2012.shape[0]+1)
 df2012.sort('f2013', ascending=False, inplace=True)
 df2012['rnk_2013'] = range(1,df2012.shape[0]+1)
-df2012.to_csv('f2013_projection_3yrs.csv', headers=True,index=True)
+#df2012.to_csv('f2013_projection_3yrs.csv', headers=True,index=True)
 
-
+##########
+### PROJECTIONS - 2014
+##########
 # Get 2011/12/13 stats for 2014 projection
 y=2014
 y3 = [y-1,y-2,y-3]
@@ -156,4 +184,16 @@ df2013.sort('f_yr3', ascending=False, inplace=True)
 df2013['rnk_2013'] = range(1,df2013.shape[0]+1)
 df2013.sort('f2014', ascending=False, inplace=True)
 df2013['rnk_2014'] = range(1,df2013.shape[0]+1)
-df2013.to_csv('f2014_projection_3yrs.csv', headers=True,index=True)
+#df2013.to_csv('f2014_projection_3yrs.csv', headers=True,index=True)
+
+# Get 2011/12/13 stats for 2014 projection
+y=2014
+y3 = [y-1,y-2,y-3]
+tms_include = np.intersect1d(df[df.Year == y3[0]].Team.values, df[df.Year == y3[2]].Team.values)
+df2013 = pd.merge(df[(df.Year.isin(y3)) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), df[(df.Year == y3[0]) & (df.Team.isin(tms_include))].groupby('Team')[Xvar].mean(), how='left',left_index=True, right_index=True, suffixes=['_3yr_avg','_yr3'])
+df2013['f2014'] = rn3.predict(df2013.values)
+df2013.sort('f_yr3', ascending=False, inplace=True)
+df2013['rnk_2013'] = range(1,df2013.shape[0]+1)
+df2013.sort('f2014', ascending=False, inplace=True)
+df2013['rnk_2014'] = range(1,df2013.shape[0]+1)
+df2013.to_csv('f2014_projection_3yrs_rn.csv', headers=True,index=True)
