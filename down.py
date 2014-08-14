@@ -5,6 +5,7 @@ import pandas as pd
 from pandas.tools.plotting import scatter_matrix
 from matplotlib import pyplot as plt
 
+from sklearn.feature_selection import f_regression
 from sklearn.linear_model import LinearRegression as LR
 from sklearn.neighbors import KNeighborsRegressor as KNR
 from sklearn.neighbors import RadiusNeighborsRegressor as RNR
@@ -26,6 +27,7 @@ df = pd.read_csv('down_dist.csv', index_col='Tm')
 
 yrs = df.Yr.unique()
 Xcol = [c for c in df.columns if c != "Yr"]
+Xcol = ['1D', '2D', '3D', 'all']
 
 df_avg = None
 rolling_yrs = 3
@@ -36,18 +38,46 @@ for y in yrs:
 		break
 	tms_include = np.intersect1d(df[df.Yr == y].index.values, df[df.Yr == yr1].index.values)
 	df_tmp = df[(df.index.isin(tms_include)) & (df.Yr < y) & (df.Yr >= yr1)].groupby(df[(df.index.isin(tms_include)) & (df.Yr < y) & (df.Yr >= yr1)].index)[Xcol].mean()
-	df_tmp = pd.merge(df[(df.index.isin(tms_include)) & (df.Yr == y)], df_tmp, how='left', left_index=True, right_index=True, suffixes=('_yr', '_avg'))
-	df_tmp = pd.merge(df_tmp, df[(df.index.isin(tms_include)) & (df.Yr == prevYr)], how='left', left_index=True, right_index=True, suffixes=('', '_prev'))
+	df_tmp = pd.merge(df[(df.index.isin(tms_include)) & (df.Yr == y)][Xcol], df_tmp, how='left', left_index=True, right_index=True, suffixes=('_yr', '_avg'))
+	df_tmp = pd.merge(df_tmp, df[(df.index.isin(tms_include)) & (df.Yr == prevYr)][Xcol], how='left', left_index=True, right_index=True, suffixes=('', '_prev'))
 	if df_avg is None:
 		df_avg = df_tmp
 	else:
 		df_avg = df_avg.append(df_tmp)
 
-df_avg.drop('Yr_prev', 1, inplace=True)
+#df_avg.drop('Yr_prev', 1, inplace=True)
 for x in Xcol:
 	x_new = "%s_prev" % x
 	df_avg.rename(columns={x:x_new}, inplace=True)
 
+X,y = df_avg[['3D_avg', 'all_avg','3D_prev', 'all_prev']].values, df_avg['all_yr'].values
+
+#f_regression
+F_avg, p_avg = f_regression(df_avg[['all_avg']].values, df_avg['all_yr'].values)
+F_prev, p_prev = f_regression(df_avg[['all_prev']].values, df_avg['all_yr'].values)	
+F_comb, p_comb = f_regression(df_avg[['all_prev', 'all_avg']].values, df_avg['all_yr'].values)	
+
+print "Avg: ", p_avg
+print "Prev: ", p_prev
+print "Comb: "
+print " -- prev", p_comb[0]
+print " -- avg", p_comb[1]
+
+linAvg = LR()
+linAvg.fit(df_avg[['all_avg']].values, df_avg['all_yr'].values)
+print linAvg.score(df_avg[['all_avg']].values, df_avg['all_yr'].values)
+
+linPrev = LR()
+linPrev.fit(df_avg[['all_prev']].values, df_avg['all_yr'].values)
+print linPrev.score(df_avg[['all_prev']].values, df_avg['all_yr'].values)
+	
+linComb = LR()
+linComb.fit(df_avg[['all_prev', 'all_avg']].values, df_avg['all_yr'].values)
+print linComb.score(df_avg[['all_prev', 'all_avg']].values, df_avg['all_yr'].values)
+
+linDet = LR()
+linDet.fit(X,y)
+print linDet.score(X,y)
 
 # df_avg == 3 year rolling average + yr4 stats
 X,y = df_avg[['all_avg']].values, df_avg['all_yr'].values

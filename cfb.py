@@ -1,4 +1,4 @@
-###		CFB F/+ Analysis
+'###		CFB F/+ Analysis
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -55,6 +55,27 @@ for y in yrs:
 	df_tmp.rename(columns={'f_x':'yr1_f', 'f_y':'yr2_f'}, inplace=True)
 	df_lag = df_lag.append(df_tmp[df_lag.columns])
 
+	
+########## LAG ANALYSIS UP TO 5 YEARS
+df_lag = pd.DataFrame(columns=['Team','Year', 'yr1_f','f_yr-1','f_yr-2','f_yr-3','f_yr-4','f_yr-5'])
+df_tmp = None
+for y in yrs[::-1]:
+	df_tmp = None
+	for n in range(5,0,-1):
+		y2 = y-n
+		if y2 in yrs:
+			print y2, " -> ", y
+			tms_include = np.intersect1d(df[df.Year == y].Team.values, df[df.Year == y2].Team.values)
+			if df_tmp is None:
+				df_tmp = pd.merge(df[(df.Year == y) & (df.Team.isin(tms_include))][['Team','Year','f']],df[(df.Year == y2) & (df.Team.isin(tms_include))][['Team','f']],on=['Team'])
+				df_tmp.rename(columns={'f_x':'yr1_f', 'f_y':'f_yr-%d' % (n)}, inplace=True)
+			else:
+				df_tmp = pd.merge(df_tmp,df[(df.Year == y2) & (df.Team.isin(tms_include))][['Team','f']],how='left', on=['Team'])
+				df_tmp.rename(columns={'f':'f_yr-%d' % (n)}, inplace=True)
+	if df_tmp is not None:
+		df_lag = df_lag.append(df_tmp[df_tmp.columns])
+	
+	
 # Calculate changes
 # df_lag['change'] = df_lag.yr2 - df_lag.yr1
 # df_lag['abs_change'] = abs(df_lag.yr2 - df_lag.yr1)
@@ -80,7 +101,7 @@ linreg.score(X, y)
 # build 3yr avgs
 df_3avg = pd.DataFrame(columns=['avg_f']+['off_f','def_f','st_f','s_p','fei','yr4_f'])
 for y in -np.sort(-yrs):
-	
+	y2 = y+1
 	if y2 not in yrs:
 		break
 	print y, "-", y2
